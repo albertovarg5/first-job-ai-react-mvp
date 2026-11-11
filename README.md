@@ -13,7 +13,7 @@ It searches real job listings, turns everyday experience (class projects, volunt
 
 ## Sprint 1 MVP
 
-**Live app:** <https://first-job-ai-steel.vercel.app> · **Backend health check:** <https://first-job-ai-production.up.railway.app/healthz> (answers `ok`)
+**Live app:** <https://first-job-ai-react-mvp.vercel.app> · **Backend health check:** <https://first-job-ai-react-mvp-production.up.railway.app/healthz> (answers `ok`)
 
 **Stack:** React 19 + Vite (frontend, Vercel) · Node.js 22+ server (Railway) · PostgreSQL (PGlite locally) · JSearch (jobs) · Anthropic (optional AI). Stripe billing exists in the code but is **off** for Sprint 1.
 

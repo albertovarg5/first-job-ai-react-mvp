@@ -12,7 +12,7 @@ import { httpsRedirect } from '../server/http.js';
 import { call, jsonResponse, withFetch } from './helpers.js';
 
 const read = (file) => JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'));
-const BACKEND = 'https://first-job-ai-production.up.railway.app';
+const BACKEND = 'https://first-job-ai-react-mvp-production.up.railway.app';
 
 test('Vercel builds and serves the frontend and forwards only /api and /healthz to the one Railway backend', () => {
   const vercel = read('vercel.json');
