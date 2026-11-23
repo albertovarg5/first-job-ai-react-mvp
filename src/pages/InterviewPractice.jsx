@@ -7,8 +7,8 @@ import { ConfirmDialog } from '../components/Modal.jsx';
 import { EmptyState, Field, ModeNotice, PageHeader, ProgressBar, Segmented, Spinner } from '../components/ui.jsx';
 import { useAppData } from '../context/AppDataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
-import { INTERVIEW_TYPES, buildQuestionSet } from '../lib/questionBank.js';
-import { checkAnswer } from '../lib/answerChecklist.js';
+import { INTERVIEW_TYPES, QUESTION_COUNT, buildQuestionSet, fillQuestions } from '../lib/questionBank.js';
+import { getAnswerFeedback, sessionAverage } from '../lib/interviewFeedback.js';
 import { callAi } from '../lib/ai.js';
 import { createId, formatDateTime, wordCount } from '../lib/utils.js';
 
@@ -32,7 +32,6 @@ function Setup({ onStart, defaultTitle, defaultJob, busy }) {
   // The tracked application this practice is for, so its workflow step can be marked done.
   const [applicationId, setApplicationId] = useState(defaultJob?.id || null);
   const [type, setType] = useState('mixed');
-  const [count, setCount] = useState(5);
   const [useAi, setUseAi] = useState(true);
   const [error, setError] = useState('');
 
@@ -42,7 +41,7 @@ function Setup({ onStart, defaultTitle, defaultJob, busy }) {
       setError('Enter the job title you’re preparing for.');
       return;
     }
-    onStart({ jobTitle: jobTitle.trim(), type, count, jobDescription: jobDescription.trim(), useAi: aiActive && useAi, applicationId });
+    onStart({ jobTitle: jobTitle.trim(), type, jobDescription: jobDescription.trim(), useAi: aiActive && useAi, applicationId });
   };
 
   return (
@@ -94,18 +93,6 @@ function Setup({ onStart, defaultTitle, defaultJob, busy }) {
             ))}
           </div>
         </Field>
-        <Field label="Number of questions">
-          <Segmented
-            label="Number of questions"
-            value={String(count)}
-            onChange={(v) => setCount(Number(v))}
-            options={[
-              { value: '3', label: '3 questions' },
-              { value: '5', label: '5 questions' },
-              { value: '8', label: '8 questions' },
-            ]}
-          />
-        </Field>
         <div>
           <button type="submit" className="btn btn-primary btn-lg" disabled={busy}>
             {busy ? <Spinner /> : <Icon name="play" size={15} />} {busy ? 'Preparing questions…' : 'Start practicing'}
@@ -144,22 +131,15 @@ function Session({ session, onUpdate, onFinish, onExit }) {
       return;
     }
     setLoading(true);
-    let feedback;
-    if (aiActive) {
-      try {
-        const res = await callAi('feedback', {
-          question: item.question,
-          answer: draft,
-          jobTitle: session.jobTitle,
-          category: item.category,
-        });
-        feedback = { mode: 'ai', model: aiStatus.model, ...res };
-      } catch (err) {
-        feedback = { ...checkAnswer({ question: item.question, answer: draft, category: item.category }), fallbackReason: err.message };
-      }
-    } else {
-      feedback = checkAnswer({ question: item.question, answer: draft, category: item.category });
-    }
+    const feedback = await getAnswerFeedback({
+      question: item.question,
+      answer: draft,
+      category: item.category,
+      jobTitle: session.jobTitle,
+      aiActive,
+      model: aiStatus.model,
+      callAi,
+    });
     setLoading(false);
     saveItem({ answer: draft, feedback, answeredAt: new Date().toISOString() });
   };
@@ -252,6 +232,7 @@ function SessionReview({ session, onDelete, onResume }) {
               <span>
                 {answered.length} of {session.items.length} answered
               </span>
+              {sessionAverage(session) !== null && <span>Average score {sessionAverage(session)}/10</span>}
             </small>
           </span>
         </button>
@@ -300,7 +281,8 @@ export default function InterviewPractice() {
   const active = sessions.find((s) => s.id === activeId);
   const summary = sessions.find((s) => s.id === summaryId);
 
-  const start = async ({ jobTitle, type, count, jobDescription, useAi, applicationId }) => {
+  const start = async ({ jobTitle, type, jobDescription, useAi, applicationId }) => {
+    const count = QUESTION_COUNT;
     let questions = null;
     if (useAi) {
       setPreparing(true);
@@ -313,7 +295,9 @@ export default function InterviewPractice() {
         setPreparing(false);
       }
     }
-    if (!questions?.length) questions = buildQuestionSet({ jobTitle, type, count, jobDescription }).questions;
+    const library = buildQuestionSet({ jobTitle, type, count, jobDescription }).questions;
+    // Exactly five: if the AI returned fewer, the rest come from the built-in library (labeled as such).
+    questions = fillQuestions(questions || [], library, count);
     const session = {
       id: createId('iv'),
       jobTitle,

@@ -7,7 +7,7 @@
 // Routes:
 //   GET  /api/ai/status     -> { connected, model, error }
 //   POST /api/ai/translate  -> { bullets: string[] }
-//   POST /api/ai/feedback   -> { summary, strengths[], improvements[], nextStep }
+//   POST /api/ai/feedback   -> { score 1-10, summary, strengths[1], improvements[1], nextStep }
 //   POST /api/ai/tailor     -> { suggestions: string[] }
 //   POST /api/ai/coverLetter -> { letter, gaps[] }
 //   POST /api/ai/questions  -> { questions: [{ question, category }] }
@@ -28,6 +28,9 @@ const HONESTY_RULES =`Rules you must always follow:
 - Write in clear, plain English suitable for an entry-level job seeker.
 - Respond with JSON only, no markdown fences.`;
 
+// Interview feedback must answer quickly; the app falls back to the built-in checklist after this.
+export const FEEDBACK_TIMEOUT_MS = 14000;
+
 const TASKS = {
   translate: {
     system: `You turn everyday descriptions of experiences into professional resume bullet points for students and early-career job seekers.
@@ -40,12 +43,13 @@ Return: {"bullets": ["..."]} with 1 to 4 bullets. Each bullet starts with a stro
     system: `You are a supportive, honest interview coach for people applying to their first jobs and internships.
 ${HONESTY_RULES}
 Evaluate the candidate's written answer. For behavioral questions, check the STAR structure (situation, task, action, result).
-Return: {"summary": "one or two sentences", "strengths": ["..."], "improvements": ["..."], "example": "...", "nextStep": "one concrete thing to try on the next attempt"}.
-Give 1-3 strengths and 1-3 improvements. Quote or reference their actual words.
+Return: {"score": 7, "summary": "one or two sentences", "strengths": ["..."], "improvements": ["..."], "example": "...", "nextStep": "one concrete thing to try on the next attempt"}.
+"score" is a whole number from 1 (very weak) to 10 (excellent) for how well this answer would do in a real interview. Give EXACTLY ONE strength and EXACTLY ONE improvement (arrays with one string each). Quote or reference their actual words.
 "example" is a short outline (3-5 lines, e.g. "Situation: ...") showing how THEIR answer could be structured better, using only details they wrote. Where a detail is missing, write a bracketed prompt such as [what was the result?] instead of inventing it.`,
     user: ({ question, answer, jobTitle, category }) =>
       `Target job: ${jobTitle || 'not specified'}\nQuestion type: ${category}\nQuestion: ${question}\nCandidate's answer:\n"""${answer}"""`,
-    validate: (j) => typeof j.summary === 'string' && Array.isArray(j.strengths) && Array.isArray(j.improvements),
+    timeoutMs: FEEDBACK_TIMEOUT_MS,
+    validate: (j) => Number.isInteger(j.score) && j.score >= 1 && j.score <= 10 && typeof j.summary === 'string' && Array.isArray(j.strengths) && j.strengths.length > 0 && Array.isArray(j.improvements) && j.improvements.length > 0,
   },
   tailor: {
     system: `You help entry-level candidates tailor their resume to a specific job posting.
@@ -234,7 +238,7 @@ export function createAiHandler(env = {}) {
     const def = TASKS[task];
     const input = Object.fromEntries(Object.entries(payload || {}).map(([k, v]) => [k, clip(v)]));
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), def.timeoutMs || TIMEOUT_MS);
     try {
       const response = await fetch(`${baseUrl}/v1/messages`, {
         method: 'POST',

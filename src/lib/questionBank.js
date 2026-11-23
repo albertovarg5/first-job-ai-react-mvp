@@ -195,3 +195,12 @@ export function buildQuestionSet({ jobTitle, type, count = 5, seed, jobDescripti
   const set = type === 'general' || type === 'mixed' ? [opener, ...fromJob, ...pool] : [...fromJob, ...pool];
   return { field, questions: set.slice(0, count) };
 }
+
+export const QUESTION_COUNT = 5;
+
+// Exactly `count` questions: the given (AI) ones first, then library questions to fill the gap.
+export function fillQuestions(primary, library, count = QUESTION_COUNT) {
+  const seen = new Set(primary.map((q) => q.question.toLowerCase()));
+  const extra = library.filter((q) => !seen.has(q.question.toLowerCase()));
+  return [...primary, ...extra].slice(0, count);
+}
