@@ -42,6 +42,16 @@ It searches real job listings, turns everyday experience (class projects, volunt
 
 **Future sprints:** Sprint 2: polish the Tracker/Application workspace, AI features on a free tier. Sprint 3: email verification, legal pages and privacy review. Later: paid Premium via Stripe (currently disabled).
 
+## Sprint 3 (final)
+
+**What Sprint 3 added:** CI that now runs on pull requests and pushes to `main` (it previously pointed at an old branch), a post-deploy smoke test of the live site, a Privacy and terms page (`/privacy`, `/terms`), tests proving the two design patterns, and final documentation.
+
+- **Design patterns:** Repository (`server/billingStore.js`) and Dependency Injection with factories (`server/dataHandler.js`, `server/api.js`), explained in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and tested in `tests/patterns.test.js`.
+- **CI/CD:** [.github/workflows/ci.yml](.github/workflows/ci.yml) runs lint, tests and build on every PR to `main`. Vercel and Railway deploy `main` from GitHub; the workflow then checks that the live app and `/healthz` respond. No secrets are needed in GitHub.
+- **Monitoring:** `GET /healthz` answers `ok`; Railway restarts the backend on failure.
+- **Docs:** [docs/SPRINTS.md](docs/SPRINTS.md) (stories, acceptance criteria, status), [docs/SPRINT3_REPORT.md](docs/SPRINT3_REPORT.md) (requirements checklist, test results, Jira steps), [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+- **Sprint summary:** Sprint 1 = MVP (accounts, job search, tracker, resume PDF, deploy). Sprint 2 = component tests, mobile-first CSS, lint and PR workflow. Sprint 3 = the items above.
+
 ### Screenshots
 
 **Dashboard**
@@ -297,7 +307,7 @@ To switch real payments off again at any time, remove `STRIPE_ALLOW_LIVE` (or se
 npm test
 ```
 
-196 tests (run against PostgreSQL via PGlite) cover: moving the SQLite data into PostgreSQL, backup and restore, Stripe checkout, webhooks, cancellation and refunds, job search for both providers (OpenWeb Ninja `search-v2` with cursor paging and RapidAPI; provider detection, validation, success, caching, empty results, duplicate listings, missing fields, invalid/unsubscribed key, rate limit, upstream errors, network failure, timeout, monthly limit), settings validation (`VITE_` secrets, half-configured email, bad limits), Anthropic error handling (bad key, unknown model, rate limit, overloaded, no credit, refusal, cut-off answer), Resend email sending, saved jobs and tracker entries persisting per user in the database across sign-out, sign-in and restart, job search sign-in rules, saved-job dedupe, tracker duplicates and status history, accounts (hashing, sessions, sign-in errors, rate limiting, reset tokens, change password, delete account), **per-user data isolation**, CSRF blocking, save conflicts, data validation, migrations, honesty checks for cover letters/summaries/skills, job recommendations, AI route validation, plus the original translator, resume, PDF, missions and interview tests.
+183 server/logic tests (run against PostgreSQL via PGlite) plus 10 component tests cover: moving the SQLite data into PostgreSQL, backup and restore, Stripe checkout, webhooks, cancellation and refunds, job search for both providers (OpenWeb Ninja `search-v2` with cursor paging and RapidAPI; provider detection, validation, success, caching, empty results, duplicate listings, missing fields, invalid/unsubscribed key, rate limit, upstream errors, network failure, timeout, monthly limit), settings validation (`VITE_` secrets, half-configured email, bad limits), Anthropic error handling (bad key, unknown model, rate limit, overloaded, no credit, refusal, cut-off answer), Resend email sending, saved jobs and tracker entries persisting per user in the database across sign-out, sign-in and restart, job search sign-in rules, saved-job dedupe, tracker duplicates and status history, accounts (hashing, sessions, sign-in errors, rate limiting, reset tokens, change password, delete account), **per-user data isolation**, CSRF blocking, save conflicts, data validation, migrations, honesty checks for cover letters/summaries/skills, job recommendations, AI route validation, plus the original translator, resume, PDF, missions and interview tests.
 
 The tests never call the real JSearch or Anthropic APIs; those calls are simulated.
 

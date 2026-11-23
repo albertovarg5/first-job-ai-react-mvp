@@ -181,6 +181,7 @@ export default function Landing() {
       <footer className="landing-footer">
         <Logo />
         <span className="subtle">Made for first-time job seekers.</span>
+        <Link to="/privacy" className="subtle">Privacy and terms</Link>
       </footer>
     </div>
   );

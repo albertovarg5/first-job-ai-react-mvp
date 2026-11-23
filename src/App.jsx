@@ -15,6 +15,7 @@ import CareerMissions from './pages/CareerMissions.jsx';
 import Settings from './pages/Settings.jsx';
 import { BillingCancel, BillingSuccess } from './pages/Billing.jsx';
 import Pricing from './pages/Pricing.jsx';
+import Legal from './pages/Legal.jsx';
 import NotFound from './pages/NotFound.jsx';
 import { ForgotPassword, ResetPassword, SignIn, SignUp, VerifyEmail } from './pages/Auth.jsx';
 
@@ -22,6 +23,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/privacy" element={<Legal />} />
+      <Route path="/terms" element={<Legal />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/signin" element={<SignIn />} />
       <Route path="/signup" element={<SignUp />} />

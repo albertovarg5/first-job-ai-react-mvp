@@ -1,10 +1,15 @@
 name: CI
 
+# Quality checks run on every pull request into main and on every push to main.
 on:
   pull_request:
-    branches: [stripe-billing]
+    branches: [main]
   push:
-    branches: [stripe-billing]
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -20,3 +25,23 @@ jobs:
       # Tests use an in-memory database and fake API calls: no secrets needed.
       - run: npm test
       - run: npm run build
+
+  # Deployment: Vercel (frontend) and Railway (backend) are connected to this GitHub
+  # repository and deploy main automatically. No deploy keys are stored in GitHub.
+  # After a push to main, this job waits for the live site to answer, so a broken deploy
+  # turns the workflow red. It needs no secrets: it only reads public URLs.
+  smoke-test-production:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the deployed app and backend health check
+        run: |
+          for i in $(seq 1 20); do
+            site=$(curl -s -o /dev/null -w '%{http_code}' https://first-job-ai-react-mvp.vercel.app/ || true)
+            health=$(curl -s https://first-job-ai-react-mvp.vercel.app/healthz || true)
+            echo "attempt $i: site=$site healthz=$health"
+            if [ "$site" = "200" ] && [ "$health" = "ok" ]; then exit 0; fi
+            sleep 30
+          done
+          echo "Production did not become healthy in time" && exit 1
