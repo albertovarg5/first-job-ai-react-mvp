@@ -11,7 +11,7 @@
 - [ ] `npm run build`
 
 ## Checklist
-- [ ] The PR targets `stripe-billing`
+- [ ] The PR targets `main`
 - [ ] No API keys, passwords or `.env` files are included
 - [ ] README/docs updated if behavior changed
 - [ ] CI checks pass

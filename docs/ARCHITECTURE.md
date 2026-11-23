@@ -36,6 +36,8 @@ need instead of importing it: `createDataHandler({ db, requireUser })`,
 tests never touch production, Stripe, JSearch or Anthropic. Changing the database or an
 external service only changes one file.
 
+Proof: `tests/patterns.test.js` builds `createDataHandler` with a fake `db` and fake `requireUser` (no real database or login) and calls `createBillingStore` with a fake `db`.
+
 A second, frontend pattern is **Provider/Context** (`AuthContext`, `AppDataContext`,
 `ToastContext`).
 
