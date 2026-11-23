@@ -16,6 +16,7 @@
 //   GET /status  -> { configured, provider, monthlyLimit, usedThisMonth, country }
 //   GET /search  -> { jobs[], page, hasMore, cursor, cached, source }
 
+import { STRATEGIES, chooseStrategy, rapidApi } from './jobProviders.js';
 import { HttpError, isProduction, pathOf, queryOf, send } from './http.js';
 
 export const DATE_POSTED = ['all', 'today', '3days', 'week', 'month'];
@@ -29,32 +30,9 @@ const MAX_PAGE = 20;
 const DESCRIPTION_MAX = 20000;
 const CURSOR_RE = /^[A-Za-z0-9+/=_.-]{1,500}$/;
 
-export const PROVIDERS = {
-  openwebninja: {
-    label: 'OpenWeb Ninja',
-    baseUrl: 'https://api.openwebninja.com/jsearch',
-    path: '/search-v2',
-    headers: (key) => ({ 'x-api-key': key }),
-    keyHelp: 'your OpenWeb Ninja API key (app.openwebninja.com)',
-  },
-  rapidapi: {
-    label: 'RapidAPI',
-    baseUrl: 'https://jsearch.p.rapidapi.com',
-    path: '/search',
-    headers: (key, host = 'jsearch.p.rapidapi.com') => ({ 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': host }),
-    keyHelp: 'your X-RapidAPI-Key (rapidapi.com, subscribed to JSearch)',
-  },
-};
-
-// Picks the JSearch provider: an explicit JSEARCH_PROVIDER wins, otherwise a
-// RapidAPI-style key ("...msh...jsn...") means RapidAPI, anything else OpenWeb Ninja.
-export function resolveProvider(env = {}) {
-  const explicit = String(env.JSEARCH_PROVIDER || '').trim().toLowerCase();
-  if (PROVIDERS[explicit]) return explicit;
-  const key = String(env.JSEARCH_API_KEY || '').trim();
-  if (!key && env.RAPIDAPI_KEY) return 'rapidapi';
-  return /msh[0-9a-z]+jsn[0-9a-z]+$/i.test(key) ? 'rapidapi' : 'openwebninja';
-}
+// The provider strategies live in jobProviders.js; these names are kept for existing imports.
+export const PROVIDERS = STRATEGIES;
+export const resolveProvider = (env = {}) => chooseStrategy(env).id;
 
 const clean = (v, max) =>
   String(v ?? '')
@@ -90,21 +68,8 @@ export function parseSearchParams(params, { defaultCountry = 'us' } = {}) {
 }
 
 export function buildJSearchUrl(p, { provider = 'rapidapi', baseUrl } = {}) {
-  const def = PROVIDERS[provider] || PROVIDERS.rapidapi;
-  const url = new URL(`${(baseUrl || def.baseUrl).replace(/\/$/, '')}${def.path}`);
-  url.searchParams.set('query', p.location ? `${p.query} in ${p.location}` : p.query);
-  if (provider === 'openwebninja') {
-    if (p.cursor) url.searchParams.set('cursor', p.cursor);
-  } else {
-    url.searchParams.set('page', String(p.page));
-  }
-  url.searchParams.set('num_pages', '1');
-  url.searchParams.set('country', p.country);
-  url.searchParams.set('date_posted', p.datePosted);
-  if (p.remote) url.searchParams.set('work_from_home', 'true');
-  if (p.employmentTypes.length) url.searchParams.set('employment_types', p.employmentTypes.join(','));
-  if (p.experience) url.searchParams.set('job_requirements', p.experience);
-  return url.toString();
+  const strategy = STRATEGIES[provider] || rapidApi;
+  return strategy.buildUrl(p, baseUrl || strategy.baseUrl());
 }
 
 const safeUrl = (value) => {
@@ -203,21 +168,20 @@ export function readJSearchBody(body) {
 const ERRORS = {
   notConfigured:
     'Job search is not set up yet. Add JSEARCH_API_KEY (your OpenWeb Ninja or RapidAPI key for JSearch) to the .env file and restart the app.',
-  invalidKey: (provider) =>
-    `JSearch (${PROVIDERS[provider].label}) rejected the API key. Check JSEARCH_API_KEY in your .env file — it should be ${PROVIDERS[provider].keyHelp} — and that your account is subscribed to a JSearch plan.`,
-  rateLimited: (provider) =>
-    `The JSearch request limit for your ${PROVIDERS[provider].label} plan has been reached. Wait a bit, or check your plan’s allowance.`,
+  invalidKey: (s) =>
+    `JSearch (${s.label}) rejected the API key. Check JSEARCH_API_KEY in your .env file — it should be ${s.keyHelp} — and that your account is subscribed to a JSearch plan.`,
+  rateLimited: (s) =>
+    `The JSearch request limit for your ${s.label} plan has been reached. Wait a bit, or check your plan’s allowance.`,
   localLimit: 'This app has used its monthly job-search allowance (JSEARCH_MONTHLY_LIMIT). Searches will work again next month.',
   timeout: 'The job search service took too long to respond. Try again.',
   network: 'Could not reach the job search service. Check your internet connection and try again.',
   upstream: 'The job search service had a problem. Try again in a few minutes.',
 };
 
-export function createJobsHandler(env = {}, { usage = memoryUsageStore() } = {}) {
+// `strategy` can be injected (tests, or a new provider); by default it is chosen from env.
+export function createJobsHandler(env = {}, { usage = memoryUsageStore(), strategy = chooseStrategy(env) } = {}) {
   const apiKey = (env.JSEARCH_API_KEY || env.RAPIDAPI_KEY || '').trim();
-  const provider = resolveProvider(env);
-  const host = (env.JSEARCH_API_HOST || 'jsearch.p.rapidapi.com').trim();
-  const baseUrl = (env.JSEARCH_BASE_URL || (provider === 'rapidapi' ? `https://${host}` : PROVIDERS.openwebninja.baseUrl)).replace(/\/$/, '');
+  const baseUrl = (env.JSEARCH_BASE_URL || strategy.baseUrl(env)).replace(/\/$/, '');
   const defaultCountry = COUNTRIES.includes((env.JSEARCH_COUNTRY || '').toLowerCase()) ? env.JSEARCH_COUNTRY.toLowerCase() : 'us';
   const monthlyLimit = Math.max(0, Number(env.JSEARCH_MONTHLY_LIMIT) || 0);
   const cache = new Map();
@@ -251,8 +215,8 @@ export function createJobsHandler(env = {}, { usage = memoryUsageStore() } = {})
     let response;
     try {
       await usage.increment(monthKey(), 'jsearch');
-      response = await fetch(buildJSearchUrl(p, { provider, baseUrl }), {
-        headers: { Accept: 'application/json', ...PROVIDERS[provider].headers(apiKey, host) },
+      response = await fetch(strategy.buildUrl(p, baseUrl), {
+        headers: { Accept: 'application/json', ...strategy.headers(apiKey, env) },
         signal: AbortSignal.timeout(20000),
       });
     } catch (err) {
@@ -263,16 +227,15 @@ export function createJobsHandler(env = {}, { usage = memoryUsageStore() } = {})
     if (remaining !== null && remaining !== undefined && remaining !== '') lastRemaining = Number(remaining);
 
     const body = await response.json().catch(() => null);
-    if (response.status === 401 || response.status === 403) throw new HttpError(502, ERRORS.invalidKey(provider), 'invalid_key');
-    if (response.status === 429) throw new HttpError(429, ERRORS.rateLimited(provider), 'rate_limited');
+    if (response.status === 401 || response.status === 403) throw new HttpError(502, ERRORS.invalidKey(strategy), 'invalid_key');
+    if (response.status === 429) throw new HttpError(429, ERRORS.rateLimited(strategy), 'rate_limited');
     if (!response.ok || !body) throw new HttpError(502, ERRORS.upstream, 'upstream');
     if (body.status && body.status !== 'OK') throw new HttpError(502, ERRORS.upstream, 'upstream');
 
     const { rawJobs, cursor } = readJSearchBody(body);
     const seen = new Set();
     const jobs = rawJobs.map(normalizeJob).filter((j) => j && !seen.has(j.id) && seen.add(j.id));
-    // OpenWeb Ninja says when there is a next page (cursor); RapidAPI doesn't, so a full page means "maybe more".
-    const more = provider === 'openwebninja' ? Boolean(cursor) && rawJobs.length > 0 : rawJobs.length >= 10;
+    const more = strategy.hasMore(rawJobs, cursor);
     const value = { jobs, page: p.page, hasMore: more && p.page < MAX_PAGE, cursor: more ? cursor : null, source: 'JSearch', cached: false };
     toCache(key, value);
     return value;
@@ -285,7 +248,7 @@ export function createJobsHandler(env = {}, { usage = memoryUsageStore() } = {})
       if (production) return send(res, 200, { configured: Boolean(apiKey), country: defaultCountry });
       return send(res, 200, {
         configured: Boolean(apiKey),
-        provider: apiKey ? PROVIDERS[provider].label : null,
+        provider: apiKey ? strategy.label : null,
         country: defaultCountry,
         monthlyLimit: monthlyLimit || null,
         usedThisMonth: await usage.count(monthKey(), 'jsearch'),

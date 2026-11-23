@@ -69,5 +69,9 @@ export function checkAnswer({ question, answer, category }) {
   }
 
   const passed = checks.filter((c) => c.passed).length;
-  return { mode: 'checklist', passed, total: checks.length, checks };
+  // 1-10 score from the share of checks passed, with one strength and one improvement to match.
+  const score = Math.max(1, Math.round(1 + (9 * passed) / checks.length));
+  const strength = checks.find((c) => c.passed)?.tip || 'You took the time to write an answer. Keep practicing.';
+  const improvement = checks.find((c) => !c.passed)?.tip || 'Great structure. Try adding one more concrete detail to stand out.';
+  return { mode: 'checklist', score, strength, improvement, passed, total: checks.length, checks };
 }

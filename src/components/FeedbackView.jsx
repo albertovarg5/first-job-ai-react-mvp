@@ -14,9 +14,10 @@ export default function FeedbackView({ feedback }) {
           {feedback.model && <span className="subtle">{feedback.model}</span>}
         </div>
         <p>{feedback.summary}</p>
+        {Number.isFinite(feedback.score) && <p className="feedback-score"><strong>Score: {feedback.score}/10</strong></p>}
         {feedback.strengths?.length > 0 && (
           <div className="feedback-group">
-            <h4>What worked</h4>
+            <h4>Strength</h4>
             <ul>
               {feedback.strengths.map((s) => (
                 <li key={s}>{s}</li>
@@ -26,7 +27,7 @@ export default function FeedbackView({ feedback }) {
         )}
         {feedback.improvements?.length > 0 && (
           <div className="feedback-group">
-            <h4>What to improve</h4>
+            <h4>One thing to improve</h4>
             <ul>
               {feedback.improvements.map((s) => (
                 <li key={s}>{s}</li>
@@ -58,6 +59,13 @@ export default function FeedbackView({ feedback }) {
           {feedback.passed} of {feedback.total} checks passed
         </span>
       </div>
+      {Number.isFinite(feedback.score) && (
+        <div className="feedback-group">
+          <p className="feedback-score"><strong>Score: {feedback.score}/10</strong></p>
+          <p><strong>Strength:</strong> {feedback.strength}</p>
+          <p><strong>To improve:</strong> {feedback.improvement}</p>
+        </div>
+      )}
       <ul className="checklist">
         {feedback.checks.map((c) => (
           <li key={c.label} className={c.passed ? 'pass' : 'fail'}>
