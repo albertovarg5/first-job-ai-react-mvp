@@ -9,7 +9,7 @@ import { createDataHandler } from './dataHandler.js';
 import { dbUsageStore, openDatabase } from './db.js';
 import { createJobsHandler } from './jobsHandler.js';
 import { createAiQuota, limitReachedMessage, planLimits } from './plans.js';
-import { allowedOrigins, clientIp, createLimits, envFlag, isProduction, pathOf, peerIp, proxySettings, rateLimited, send } from './http.js';
+import { allowedOrigins, clientIp, createLimits, envFlag, isProduction, pathOf, peerIp, proxySettings, rateLimited, readJson, send } from './http.js';
 
 // State-changing requests must be JSON and, when the browser says where they
 // came from, come from this site. Together with SameSite cookies this blocks
@@ -127,6 +127,17 @@ export function createApi(env = {}, options = {}) {
     const full = pathOf(req);
     if (full === '/config' && req.method === 'GET') {
       return send(res, 200, { requireAuthForApis: app.requireAuthForApis });
+    }
+    // Browser errors are forwarded here so the Sentry key stays on the server (see errorReport.js).
+    if (full === '/client-error' && req.method === 'POST') {
+      try {
+        const b = await readJson(req, 8000);
+        await options.report?.({ name: b?.name, message: b?.message, stack: b?.stack }, 'frontend');
+      } catch {
+        /* a bad report is ignored */
+      }
+      res.statusCode = 204;
+      return res.end();
     }
     // Plan and AI allowance of the signed-in user.
     if (full === '/usage' && req.method === 'GET') {

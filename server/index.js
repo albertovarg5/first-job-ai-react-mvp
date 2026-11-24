@@ -18,6 +18,7 @@ import { reportConfig } from './config.js';
 import { httpsRedirect } from './http.js';
 import { backupSettings } from './backup.js';
 import { describeTarget } from './db.js';
+import { createReporter } from './errorReport.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const distDir = join(root, 'dist');
@@ -118,7 +119,9 @@ if (config.errors.length) {
   process.exit(1);
 }
 
-const api = createApi(process.env);
+const reporter = createReporter(process.env);
+console.log(`[First Job AI] Error tracking (Sentry): ${reporter.enabled ? 'on' : 'off (set SENTRY_DSN to turn it on)'}`);
+const api = createApi(process.env, { report: reporter.report });
 const port = Number(process.env.PORT) || 3000;
 
 const server = createServer(async (req, res) => {
@@ -157,6 +160,7 @@ const server = createServer(async (req, res) => {
     return await serveStatic(req, res);
   } catch (err) {
     console.error(err);
+    reporter.report(err, 'server');
     if (!res.headersSent) {
       res.statusCode = 500;
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -203,10 +207,15 @@ server.listen(port, () => {
 });
 
 // Unexpected errors go to the log (the host keeps it) instead of vanishing.
-process.on('unhandledRejection', (err) => console.error('[error] Unhandled promise rejection:', err));
+process.on('unhandledRejection', (err) => {
+  console.error('[error] Unhandled promise rejection:', err);
+  reporter.report(err, 'server');
+});
 process.on('uncaughtException', (err) => {
   console.error('[error] Uncaught exception, restarting:', err);
-  process.exit(1);
+  // Give the report a moment to leave before the process exits.
+  reporter.report(err, 'server').finally(() => process.exit(1));
+  setTimeout(() => process.exit(1), 3000).unref();
 });
 
 // Hosts send SIGTERM before a redeploy: finish open requests, then close the database.
