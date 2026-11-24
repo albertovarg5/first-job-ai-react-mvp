@@ -11,6 +11,7 @@ Paste after the pull request is merged and both GitHub Actions jobs (`check`, `s
 ## FJA-23: Basic monitoring
 **Implemented:** `/healthz` (real endpoint; the story's `/api/health` does not exist) verified live. Optional Sentry error tracking for backend and frontend (`server/errorReport.js`, `src/components/ErrorBoundary.jsx`, `POST /api/client-error`), with data scrubbing and rate limits. Docs: `docs/MONITORING.md`.
 **Evidence:** `tests/monitoring.test.js` (7 tests), `tests/ui/errorBoundary.spec.jsx` (2 tests).
+**Production checks (2026-11-23):** Railway `/healthz` returns `ok` (200); Railway log shows "Error tracking (Sentry): on"; a test POST to `/api/client-error` returned 204 and a foreign origin was refused (403).
 **Limitations:** NOT verified: the UptimeRobot monitor (5 min, email alert), a real Sentry project receiving events, and Railway logs/metrics. These need your accounts.
 **Status:** do NOT mark Done until you complete the steps in `docs/MONITORING.md` (UptimeRobot monitor Up and a test alert email, one Sentry test event, Railway logs and Metrics visible).
 
