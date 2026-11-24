@@ -45,3 +45,13 @@ jobs:
             sleep 30
           done
           echo "Production did not become healthy in time" && exit 1
+      - name: Check the backend directly, the API error handling and the privacy page
+        run: |
+          [ "$(curl -s https://first-job-ai-react-mvp-production.up.railway.app/healthz)" = "ok" ] || { echo "Railway backend unhealthy"; exit 1; }
+          # A search without a query must be refused with a client error (400/401), never a server error.
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://first-job-ai-react-mvp.vercel.app/api/jobs/search)
+          case "$code" in 400|401) ;; *) echo "unexpected API status $code"; exit 1;; esac
+          # The single-page app answers unknown paths (its own 404 screen) and the legal page.
+          for p in /privacy /no-such-page; do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' https://first-job-ai-react-mvp.vercel.app$p)" = "200" ] || { echo "$p failed"; exit 1; }
+          done
